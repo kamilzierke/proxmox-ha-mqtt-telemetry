@@ -2,13 +2,15 @@
 
 Publish Proxmox host hardware telemetry to Home Assistant over MQTT.
 
-This project exports host-level data that Home Assistant usually cannot see from inside a VM:
+This project exports host-level telemetry that Home Assistant usually cannot see from inside a VM:
 
 - `lm-sensors` / `sensors -j` hardware telemetry: CPU, GPU/APU, NVMe hwmon, voltage, power and alarm data.
 - `smartctl -j` SMART/NVMe disk health: disk temperature, SMART pass/fail, NVMe warnings, media errors, unsafe shutdowns, ATA sector counters and CRC errors.
 - MQTT Discovery payloads, so Home Assistant can create entities automatically.
 - systemd timer units for scheduled publishing.
 - an example Home Assistant `sections` dashboard using Mushroom cards and card-mod.
+
+![Example Home Assistant Proxmox telemetry dashboard](assets/dashboard-example.jpg)
 
 Data flow:
 
@@ -17,6 +19,17 @@ Proxmox host -> local scripts -> MQTT broker -> Home Assistant entities/dashboar
 ```
 
 No Proxmox API write permissions are required. The scripts do not start, stop, reboot, modify, or manage VMs/containers.
+
+## Documentation
+
+Start here:
+
+- [Installation](docs/installation.md) — packages, file placement, systemd units and first run.
+- [Configuration](docs/configuration.md) — `/etc/proxmox-ha-mqtt.env`, MQTT variables and entity naming notes.
+- [MQTT topics](docs/mqtt-topics.md) — state topics, discovery topics and metric classification.
+- [Dashboard](docs/dashboard.md) — Home Assistant `sections` YAML, Mushroom/card-mod requirements and entity ID caveats.
+- [Security](docs/security.md) — permissions, secret handling and pre-publish checks.
+- [Troubleshooting](docs/troubleshooting.md) — MQTT, script, systemd and discovery diagnostics.
 
 ## Repository layout
 
@@ -34,6 +47,8 @@ No Proxmox API write permissions are required. The scripts do not start, stop, r
 │   └── proxmox-ha-mqtt.env.example
 ├── dashboards/
 │   └── proxmox-hardware-dashboard.example.yaml
+├── assets/
+│   └── dashboard-example.jpg
 └── docs/
     ├── installation.md
     ├── configuration.md
@@ -67,7 +82,7 @@ systemctl enable --now proxmox-ha-hwmon.timer proxmox-ha-smart.timer
 systemctl start proxmox-ha-hwmon.service proxmox-ha-smart.service
 ```
 
-Full instructions are in `docs/installation.md`.
+Full installation notes are in [docs/installation.md](docs/installation.md).
 
 ## Required Home Assistant side
 
@@ -84,7 +99,7 @@ You need:
 
 Do **not** commit your real `/etc/proxmox-ha-mqtt.env` file.
 
-It contains MQTT credentials. This repository includes only `examples/proxmox-ha-mqtt.env.example`.
+It contains MQTT credentials. This repository includes only [`examples/proxmox-ha-mqtt.env.example`](examples/proxmox-ha-mqtt.env.example).
 
 Recommended file permissions on the Proxmox host:
 
@@ -94,9 +109,11 @@ Recommended file permissions on the Proxmox host:
 -rw------- root:root /etc/proxmox-ha-mqtt.env
 ```
 
+More security notes: [docs/security.md](docs/security.md).
+
 ## Script overview
 
-### `scripts/proxmox-ha-hwmon-mqtt.sh`
+### [`scripts/proxmox-ha-hwmon-mqtt.sh`](scripts/proxmox-ha-hwmon-mqtt.sh)
 
 Reads:
 
@@ -114,7 +131,7 @@ Publishes numeric hwmon values as MQTT Discovery entities:
 - `*_alarm` -> binary problem sensors.
 - other numeric values -> diagnostic sensors.
 
-### `scripts/proxmox-ha-smart-mqtt.sh`
+### [`scripts/proxmox-ha-smart-mqtt.sh`](scripts/proxmox-ha-smart-mqtt.sh)
 
 Reads disks from:
 
@@ -152,6 +169,8 @@ systemctl status proxmox-ha-smart.timer --no-pager
 journalctl -u proxmox-ha-hwmon.service -n 100 --no-pager
 journalctl -u proxmox-ha-smart.service -n 100 --no-pager
 ```
+
+More diagnostics: [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Tested environment
 
