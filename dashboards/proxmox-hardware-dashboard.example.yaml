@@ -1,0 +1,259 @@
+type: sections
+max_columns: 4
+title: hardware
+path: hardware
+icon: mdi:server-network
+sections:
+  - type: grid
+    cards:
+      - type: custom:mushroom-title-card
+        title: Proxmox VE
+        subtitle: Host, hardware, SMART, storage telemetry
+
+      - type: custom:mushroom-chips-card
+        chips:
+          - type: template
+            icon: mdi:server
+            content: >-
+              PVE {{ 'online' if is_state('device_tracker.pve_host_proxmox', 'home') else states('device_tracker.pve_host_proxmox') }}
+            icon_color: >-
+              {{ 'green' if is_state('device_tracker.pve_host_proxmox', 'home') else 'red' }}
+            tap_action:
+              action: more-info
+              entity: device_tracker.pve_host_proxmox
+          - type: template
+            icon: mdi:lan-connect
+            content: >-
+              {{ states('sensor.pve_host_proxmox_link_speed') | int(0) }} Mbit/s
+            icon_color: >-
+              {% set s = states('sensor.pve_host_proxmox_link_speed') | int(0) %}
+              {{ 'green' if s >= 1000 else 'orange' if s > 0 else 'red' }}
+            tap_action:
+              action: more-info
+              entity: sensor.pve_host_proxmox_link_speed
+          - type: template
+            icon: mdi:home-assistant
+            content: >-
+              HA {{ 'online' if is_state('device_tracker.homeassistant_3', 'home') else states('device_tracker.homeassistant_3') }}
+            icon_color: >-
+              {{ 'green' if is_state('device_tracker.homeassistant_3', 'home') else 'red' }}
+          - type: template
+            icon: mdi:nas
+            content: >-
+              Fileserver {{ 'online' if is_state('device_tracker.proxmox_fileserver', 'home') else states('device_tracker.proxmox_fileserver') }}
+            icon_color: >-
+              {{ 'green' if is_state('device_tracker.proxmox_fileserver', 'home') else 'red' }}
+        card_mod:
+          style: |
+            ha-card {
+              --chip-border-radius: 999px;
+              --chip-background: rgba(var(--rgb-primary-text-color), 0.06);
+              --chip-spacing: 8px;
+              border-radius: 22px;
+              padding: 8px;
+            }
+
+      - type: custom:mushroom-template-card
+        primary: PVE — stan ogólny
+        secondary: >-
+          {% set problems = [
+            is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_critical_warning', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_self_test_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_self_test_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_composite_alarm', 'on')
+          ] %}
+          {% set n = problems | select('equalto', true) | list | count %}
+          {% if n == 0 %}Brak aktywnych alarmów SMART / NVMe / self-test{% else %}{{ n }} aktywne alarmy — sprawdź diagnostykę{% endif %}
+        icon: mdi:shield-check
+        icon_color: >-
+          {% set problems = [
+            is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_critical_warning', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_self_test_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_self_test_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_composite_alarm', 'on')
+          ] %}
+          {{ 'red' if (problems | select('equalto', true) | list | count) > 0 else 'green' }}
+        badge_icon: >-
+          {% set problems = [
+            is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_critical_warning', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_self_test_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_self_test_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_composite_alarm', 'on')
+          ] %}
+          {{ 'mdi:alert' if (problems | select('equalto', true) | list | count) > 0 else 'mdi:check-bold' }}
+        badge_color: >-
+          {% set problems = [
+            is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_critical_warning', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_self_test_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_self_test_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_smart_failed', 'on'),
+            is_state('binary_sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_composite_alarm', 'on')
+          ] %}
+          {{ 'red' if (problems | select('equalto', true) | list | count) > 0 else 'green' }}
+        multiline_secondary: true
+        card_mod:
+          style: |
+            ha-card {
+              border-radius: 24px;
+              padding: 10px;
+              background: linear-gradient(135deg, rgba(46,125,50,0.18), rgba(20,60,35,0.22));
+              border: 1px solid rgba(var(--rgb-primary-text-color), 0.08);
+              box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+            }
+
+  - type: grid
+    cards:
+      - type: custom:mushroom-title-card
+        title: Hardware telemetry
+        subtitle: Temperatury, napięcia i moc z hosta Proxmox
+
+      - type: custom:mushroom-template-card
+        primary: CPU AMD
+        secondary: >-
+          Tctl {{ states('sensor.proxmox_pve_hardware_proxmox_pve_k10temp_pci_00c3_tctl_temperature') | float(0) | round(1) }}°C • CCD {{ states('sensor.proxmox_pve_hardware_proxmox_pve_k10temp_pci_00c3_tccd1_temperature') | float(0) | round(1) }}°C
+        icon: mdi:cpu-64-bit
+        icon_color: >-
+          {% set t = states('sensor.proxmox_pve_hardware_proxmox_pve_k10temp_pci_00c3_tctl_temperature') | float(0) %}
+          {{ 'red' if t >= 85 else 'orange' if t >= 75 else 'amber' if t >= 65 else 'green' }}
+        card_mod:
+          style: |
+            ha-card { border-radius: 22px; background: linear-gradient(135deg, rgba(255,152,0,0.14), rgba(30,30,30,0.18)); border: 1px solid rgba(255,152,0,0.18); }
+
+      - type: custom:mushroom-template-card
+        primary: GPU / APU AMD
+        secondary: >-
+          Temp {{ states('sensor.proxmox_pve_hardware_proxmox_pve_amdgpu_pci_0d00_edge_temperature') | float(0) | round(1) }}°C • PPT {{ states('sensor.proxmox_pve_hardware_proxmox_pve_amdgpu_pci_0d00_ppt_power') | float(0) | round(1) }} W • VDDGFX {{ states('sensor.proxmox_pve_hardware_proxmox_pve_amdgpu_pci_0d00_vddgfx_voltage') | float(0) | round(3) }} V
+        icon: mdi:expansion-card
+        icon_color: >-
+          {% set t = states('sensor.proxmox_pve_hardware_proxmox_pve_amdgpu_pci_0d00_edge_temperature') | float(0) %}
+          {{ 'red' if t >= 85 else 'orange' if t >= 75 else 'green' }}
+        multiline_secondary: true
+        card_mod:
+          style: |
+            ha-card { border-radius: 22px; background: linear-gradient(135deg, rgba(33,150,243,0.13), rgba(20,30,55,0.24)); border: 1px solid rgba(33,150,243,0.18); }
+
+      - type: custom:mushroom-template-card
+        primary: NVMe hardware sensor
+        secondary: >-
+          Composite {{ states('sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_composite_temperature') | float(0) | round(1) }}°C • S1 {{ states('sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_sensor_1_temperature') | float(0) | round(1) }}°C • S2 {{ states('sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_sensor_2_temperature') | float(0) | round(1) }}°C
+        icon: mdi:harddisk
+        icon_color: >-
+          {% set t = states('sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_composite_temperature') | float(0) %}
+          {{ 'red' if t >= 75 else 'orange' if t >= 65 else 'green' }}
+        badge_icon: >-
+          {{ 'mdi:alert' if is_state('binary_sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_composite_alarm', 'on') else 'mdi:check-bold' }}
+        badge_color: >-
+          {{ 'red' if is_state('binary_sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_composite_alarm', 'on') else 'green' }}
+        multiline_secondary: true
+        card_mod:
+          style: |
+            ha-card { border-radius: 22px; background: linear-gradient(135deg, rgba(0,188,212,0.13), rgba(15,45,50,0.24)); border: 1px solid rgba(0,188,212,0.18); }
+
+  - type: grid
+    cards:
+      - type: custom:mushroom-title-card
+        title: Dyski — SMART / NVMe
+        subtitle: Skrócony widok zdrowia i błędów krytycznych
+
+      - type: custom:mushroom-template-card
+        primary: Samsung SSD 980 1TB
+        secondary: >-
+          {{ states('sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_temperature_current') | float(0) | round(1) }}°C • R {{ states('sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_data_read') | float(0) | round(1) }} TB / W {{ states('sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_data_written') | float(0) | round(1) }} TB • errors {{ states('sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_media_errors') | int(0) }}
+        icon: mdi:harddisk
+        icon_color: >-
+          {% set bad = is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_smart_failed', 'on') or is_state('binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_critical_warning', 'on') %}
+          {% set t = states('sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_temperature_current') | float(0) %}
+          {{ 'red' if bad or t >= 75 else 'orange' if t >= 65 else 'green' }}
+        multiline_secondary: true
+
+      - type: custom:mushroom-template-card
+        primary: Seagate IronWolf 4TB — ZW60SKHL
+        secondary: >-
+          {{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_temperature_current') | float(0) | round(1) }}°C • bad {{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_reallocated_sector_count') | int(0) }}/{{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_current_pending_sector') | int(0) }}/{{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_offline_uncorrectable') | int(0) }} • CRC {{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_udma_crc_error_count') | int(0) }}
+        icon: mdi:database-alert
+        icon_color: >-
+          {% set r = states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_reallocated_sector_count') | int(0) %}
+          {% set p = states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_current_pending_sector') | int(0) %}
+          {% set u = states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_offline_uncorrectable') | int(0) %}
+          {{ 'red' if (r+p+u) > 0 else 'green' }}
+        multiline_secondary: true
+
+      - type: custom:mushroom-template-card
+        primary: Seagate IronWolf 4TB — ZW60SLDK
+        secondary: >-
+          {{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_temperature_current') | float(0) | round(1) }}°C • bad {{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_reallocated_sector_count') | int(0) }}/{{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_current_pending_sector') | int(0) }}/{{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_offline_uncorrectable') | int(0) }} • CRC {{ states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_udma_crc_error_count') | int(0) }}
+        icon: mdi:database-alert
+        icon_color: >-
+          {% set r = states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_reallocated_sector_count') | int(0) %}
+          {% set p = states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_current_pending_sector') | int(0) %}
+          {% set u = states('sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_offline_uncorrectable') | int(0) %}
+          {{ 'red' if (r+p+u) > 0 else 'green' }}
+        multiline_secondary: true
+
+  - type: grid
+    cards:
+      - type: custom:mushroom-title-card
+        title: Centrum alarmów
+        subtitle: SMART / NVMe / sektory / self-test
+
+      - type: entities
+        title: Surowe alarmy
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_smart_failed
+            name: Samsung SMART failed
+          - entity: binary_sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_critical_warning
+            name: Samsung NVMe critical warning
+          - entity: binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_smart_failed
+            name: ZW60SKHL SMART failed
+          - entity: binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_self_test_failed
+            name: ZW60SKHL self-test failed
+          - entity: binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_smart_failed
+            name: ZW60SLDK SMART failed
+          - entity: binary_sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_self_test_failed
+            name: ZW60SLDK self-test failed
+          - entity: binary_sensor.proxmox_pve_hardware_proxmox_pve_nvme_pci_0c00_composite_alarm
+            name: NVMe composite alarm
+        card_mod:
+          style: |
+            ha-card { border-radius: 22px; overflow: hidden; border: 1px solid rgba(var(--rgb-primary-text-color), 0.08); background: rgba(var(--rgb-card-background-color), 0.78); }
+
+      - type: entities
+        title: Krytyczne liczniki SMART
+        show_header_toggle: false
+        entities:
+          - entity: sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_media_errors
+            name: NVMe media errors
+          - entity: sensor.proxmox_pve_disk_samsung_ssd_980_1tb_s649nu0w940418m_nvme_error_log_entries
+            name: NVMe error log entries
+          - entity: sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_reallocated_sector_count
+            name: ZW60SKHL reallocated
+          - entity: sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_current_pending_sector
+            name: ZW60SKHL pending
+          - entity: sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_offline_uncorrectable
+            name: ZW60SKHL uncorrectable
+          - entity: sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60skhl_ata_udma_crc_error_count
+            name: ZW60SKHL CRC
+          - entity: sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_reallocated_sector_count
+            name: ZW60SLDK reallocated
+          - entity: sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_current_pending_sector
+            name: ZW60SLDK pending
+          - entity: sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_offline_uncorrectable
+            name: ZW60SLDK uncorrectable
+          - entity: sensor.proxmox_pve_disk_st4000vn006_3cw104_zw60sldk_ata_udma_crc_error_count
+            name: ZW60SLDK CRC
+        card_mod:
+          style: |
+            ha-card { border-radius: 22px; overflow: hidden; border: 1px solid rgba(var(--rgb-primary-text-color), 0.08); }
+cards: []
