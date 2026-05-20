@@ -10,7 +10,9 @@ This project exports host-level telemetry that Home Assistant usually cannot see
 - systemd timer units for scheduled publishing.
 - an example Home Assistant `sections` dashboard using Mushroom cards and card-mod.
 
-![Example Home Assistant Proxmox telemetry dashboard](assets/dashboard-example.jpg)
+<p align="center">
+  <img src="https://github.com/kamilzierke/proxmox-ha-mqtt-telemetry/raw/main/assets/dashboard-example.jpg" alt="Example Home Assistant Proxmox telemetry dashboard" width="100%">
+</p>
 
 Data flow:
 
