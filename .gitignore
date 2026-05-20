@@ -1,0 +1,19 @@
+# Runtime secrets / local config
+.env
+*.env
+*.secret
+secrets.*
+proxmox-ha-mqtt.env
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Local dumps / diagnostics
+*.log
+*.dump
+*.jsonl
