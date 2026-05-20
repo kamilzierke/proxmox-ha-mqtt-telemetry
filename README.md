@@ -11,7 +11,8 @@ This project exports host-level telemetry that Home Assistant usually cannot see
 - an example Home Assistant `sections` dashboard using Mushroom cards and card-mod.
 
 <p align="center">
-  <img src="https://github.com/kamilzierke/proxmox-ha-mqtt-telemetry/raw/main/assets/dashboard-example.jpg" alt="Example Home Assistant Proxmox telemetry dashboard" width="100%">
+<img width="1318" height="1277" alt="7afcd35d-7ba0-4d67-9b0a-e6c41b72696a" src="https://github.com/user-attachments/assets/f18e1965-1929-47f8-9d00-8045e675fae5" />
+
 </p>
 
 Data flow:
