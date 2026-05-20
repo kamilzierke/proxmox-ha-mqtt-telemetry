@@ -1,0 +1,8 @@
+[Unit]
+Description=Publish Proxmox disk SMART/NVMe data to Home Assistant via MQTT
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/proxmox-ha-smart-mqtt.sh

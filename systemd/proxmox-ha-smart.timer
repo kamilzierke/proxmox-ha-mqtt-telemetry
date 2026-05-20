@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Proxmox disk SMART MQTT publisher every 5 minutes
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=5min
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
