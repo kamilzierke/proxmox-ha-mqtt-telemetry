@@ -12,6 +12,12 @@ empty fields (e.g. an unset device_class) were silently dropped and later
 fields shifted left - `state_class: measurement` ended up published as
 `device_class: measurement` for several NVMe sensors. Here metrics are
 built as plain Python tuples, so there is no delimiter to squeeze.
+
+The metric set (48 keys) and every unique_id/state_topic are built to match
+proxmox-ha-smart-mqtt.sh byte-for-byte as it was actually running in
+production (verified against a live host via sha256 and a full key-set
+diff), not the stale copy that had drifted in this repo before commit
+"Sync proxmox-ha-smart-mqtt.sh with the version actually running on pve".
 """
 
 from __future__ import annotations
@@ -51,15 +57,23 @@ _SCAN_COMMENT = re.compile(r"\s*#.*$")
 ATA_ATTR_TABLE = [
     (5, "ata_reallocated_sector_count", "ATA reallocated sector count", "", "", "measurement"),
     (10, "ata_spin_retry_count", "ATA spin retry count", "", "", "measurement"),
+    (183, "ata_runtime_bad_block", "ATA runtime bad block", "", "", "measurement"),
+    (184, "ata_end_to_end_error", "ATA end-to-end error", "", "", "measurement"),
     (187, "ata_reported_uncorrect", "ATA reported uncorrectable", "", "", "measurement"),
     (188, "ata_command_timeout", "ATA command timeout", "", "", "measurement"),
+    (191, "ata_g_sense_error_rate", "ATA G-sense error rate", "", "", "measurement"),
     (192, "ata_power_off_retract_count", "ATA power-off retract count", "", "", "measurement"),
     (193, "ata_load_cycle_count", "ATA load cycle count", "", "", "measurement"),
     (197, "ata_current_pending_sector", "ATA current pending sector", "", "", "measurement"),
     (198, "ata_offline_uncorrectable", "ATA offline uncorrectable", "", "", "measurement"),
     (199, "ata_udma_crc_error_count", "ATA UDMA CRC error count", "", "", "measurement"),
 ]
-# (attribute id, key, name) for the two raw-value-times-block-size counters (TB, cumulative)
+# (attribute id, key, name) for the raw LBA counters, as-is (cumulative, unitless)
+ATA_LBA_ATTR_TABLE = [
+    (241, "ata_total_lbas_written", "ATA total LBAs written"),
+    (242, "ata_total_lbas_read", "ATA total LBAs read"),
+]
+# (attribute id, key, name) for the same two counters converted to TB (raw * logical_block_size)
 ATA_TB_ATTR_TABLE = [
     (241, "ata_total_written_tb", "ATA total written"),
     (242, "ata_total_read_tb", "ATA total read"),
@@ -159,7 +173,7 @@ def build_metrics(smart_json: dict, smart_exit: int) -> list:
         critical_warning = nvme.get("critical_warning")
         add(
             "binary_sensor",
-            "nvme_critical_warning",
+            "nvme_critical_warning_problem",
             "NVMe critical warning",
             None if critical_warning is None else (0 if critical_warning == 0 else 1),
             device_class="problem",
@@ -212,6 +226,21 @@ def build_metrics(smart_json: dict, smart_exit: int) -> list:
         data_units_read = nvme.get("data_units_read")
         add(
             "sensor",
+            "nvme_data_units_read",
+            "NVMe data units read",
+            data_units_read,
+            state_class="total_increasing",
+        )
+        data_units_written = nvme.get("data_units_written")
+        add(
+            "sensor",
+            "nvme_data_units_written",
+            "NVMe data units written",
+            data_units_written,
+            state_class="total_increasing",
+        )
+        add(
+            "sensor",
             "nvme_data_read_tb",
             "NVMe data read",
             None if data_units_read is None else data_units_read * 512000 / 1_000_000_000_000,
@@ -219,7 +248,6 @@ def build_metrics(smart_json: dict, smart_exit: int) -> list:
             device_class="data_size",
             state_class="total_increasing",
         )
-        data_units_written = nvme.get("data_units_written")
         add(
             "sensor",
             "nvme_data_written_tb",
@@ -229,6 +257,45 @@ def build_metrics(smart_json: dict, smart_exit: int) -> list:
             else data_units_written * 512000 / 1_000_000_000_000,
             unit="TB",
             device_class="data_size",
+            state_class="total_increasing",
+        )
+        add(
+            "sensor",
+            "nvme_host_reads",
+            "NVMe host reads",
+            nvme.get("host_reads"),
+            state_class="total_increasing",
+        )
+        add(
+            "sensor",
+            "nvme_host_writes",
+            "NVMe host writes",
+            nvme.get("host_writes"),
+            state_class="total_increasing",
+        )
+        add(
+            "sensor",
+            "nvme_controller_busy_time",
+            "NVMe controller busy time",
+            nvme.get("controller_busy_time"),
+            unit="min",
+            device_class="duration",
+            state_class="total_increasing",
+        )
+        add(
+            "sensor",
+            "nvme_power_cycles",
+            "NVMe power cycles",
+            nvme.get("power_cycles"),
+            state_class="total_increasing",
+        )
+        add(
+            "sensor",
+            "nvme_power_on_hours",
+            "NVMe power on hours",
+            nvme.get("power_on_hours"),
+            unit="h",
+            device_class="duration",
             state_class="total_increasing",
         )
         add(
@@ -252,6 +319,24 @@ def build_metrics(smart_json: dict, smart_exit: int) -> list:
             nvme.get("num_err_log_entries"),
             state_class="total_increasing",
         )
+        add(
+            "sensor",
+            "nvme_warning_temp_time",
+            "NVMe warning temperature time",
+            nvme.get("warning_temp_time"),
+            unit="min",
+            device_class="duration",
+            state_class="total_increasing",
+        )
+        add(
+            "sensor",
+            "nvme_critical_comp_time",
+            "NVMe critical composite temperature time",
+            nvme.get("critical_comp_time"),
+            unit="min",
+            device_class="duration",
+            state_class="total_increasing",
+        )
 
     add(
         "sensor",
@@ -260,9 +345,8 @@ def build_metrics(smart_json: dict, smart_exit: int) -> list:
         ((smart_json.get("ata_smart_error_log") or {}).get("summary") or {}).get("count"),
         state_class="total_increasing",
     )
-    self_test_passed = (
-        ((smart_json.get("ata_smart_data") or {}).get("self_test") or {}).get("status") or {}
-    ).get("passed")
+    self_test = (smart_json.get("ata_smart_data") or {}).get("self_test") or {}
+    self_test_passed = (self_test.get("status") or {}).get("passed")
     add(
         "binary_sensor",
         "ata_self_test_failed",
@@ -270,12 +354,36 @@ def build_metrics(smart_json: dict, smart_exit: int) -> list:
         None if self_test_passed is None else (0 if self_test_passed else 1),
         device_class="problem",
     )
+    polling_minutes = self_test.get("polling_minutes") or {}
+    add(
+        "sensor",
+        "ata_short_self_test_minutes",
+        "ATA short self-test duration",
+        polling_minutes.get("short"),
+        unit="min",
+        device_class="duration",
+        state_class="measurement",
+    )
+    add(
+        "sensor",
+        "ata_extended_self_test_minutes",
+        "ATA extended self-test duration",
+        polling_minutes.get("extended"),
+        unit="min",
+        device_class="duration",
+        state_class="measurement",
+    )
 
     attr_table = (smart_json.get("ata_smart_attributes") or {}).get("table") or []
     for attr_id, key, name, unit, device_class, state_class in ATA_ATTR_TABLE:
         attr = find_ata_attr(attr_table, attr_id)
         raw_value = (attr or {}).get("raw", {}).get("value") if attr else None
         add("sensor", key, name, raw_value, unit=unit, device_class=device_class, state_class=state_class)
+
+    for attr_id, key, name in ATA_LBA_ATTR_TABLE:
+        attr = find_ata_attr(attr_table, attr_id)
+        raw_value = (attr or {}).get("raw", {}).get("value") if attr else None
+        add("sensor", key, name, raw_value, state_class="total_increasing")
 
     logical_block_size = smart_json.get("logical_block_size") or 512
     for attr_id, key, name in ATA_TB_ATTR_TABLE:
