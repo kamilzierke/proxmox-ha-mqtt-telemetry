@@ -18,8 +18,14 @@ This project exports host-level telemetry that Home Assistant usually cannot see
 Data flow:
 
 ```text
-Proxmox host -> local scripts -> MQTT broker -> Home Assistant entities/dashboard
+Proxmox host -> local daemons -> MQTT broker -> Home Assistant entities/dashboard
 ```
+
+Both exporters are long-running Python daemons managed by systemd (`Type=simple`,
+`Restart=always`), not one-shot scripts fired by a timer. Each holds a single
+MQTT connection open for its whole lifetime and sets a Last Will, so Home
+Assistant is told `offline` by the broker itself if the daemon dies or the
+host loses power — not just when someone remembers to publish it.
 
 No Proxmox API write permissions are required. The scripts do not start, stop, reboot, modify, or manage VMs/containers.
 
@@ -39,13 +45,12 @@ Start here:
 ```text
 .
 ├── scripts/
-│   ├── proxmox-ha-hwmon-mqtt.sh
-│   └── proxmox-ha-smart-mqtt.sh
+│   ├── proxmox-ha-hwmon-daemon.py
+│   ├── proxmox-ha-smart-daemon.py
+│   └── proxmox_ha_common.py
 ├── systemd/
 │   ├── proxmox-ha-hwmon.service
-│   ├── proxmox-ha-hwmon.timer
-│   ├── proxmox-ha-smart.service
-│   └── proxmox-ha-smart.timer
+│   └── proxmox-ha-smart.service
 ├── examples/
 │   └── proxmox-ha-mqtt.env.example
 ├── dashboards/
@@ -67,22 +72,20 @@ On the Proxmox host:
 
 ```bash
 apt update
-apt install -y lm-sensors jq mosquitto-clients smartmontools
+apt install -y lm-sensors python3 python3-paho-mqtt mosquitto-clients smartmontools
 
-install -m 700 scripts/proxmox-ha-hwmon-mqtt.sh /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
-install -m 700 scripts/proxmox-ha-smart-mqtt.sh /usr/local/sbin/proxmox-ha-smart-mqtt.sh
+install -m 700 scripts/proxmox-ha-hwmon-daemon.py /usr/local/sbin/proxmox-ha-hwmon-daemon.py
+install -m 700 scripts/proxmox-ha-smart-daemon.py /usr/local/sbin/proxmox-ha-smart-daemon.py
+install -m 644 scripts/proxmox_ha_common.py /usr/local/sbin/proxmox_ha_common.py
 
 install -m 644 systemd/proxmox-ha-hwmon.service /etc/systemd/system/proxmox-ha-hwmon.service
-install -m 644 systemd/proxmox-ha-hwmon.timer /etc/systemd/system/proxmox-ha-hwmon.timer
 install -m 644 systemd/proxmox-ha-smart.service /etc/systemd/system/proxmox-ha-smart.service
-install -m 644 systemd/proxmox-ha-smart.timer /etc/systemd/system/proxmox-ha-smart.timer
 
 install -m 600 examples/proxmox-ha-mqtt.env.example /etc/proxmox-ha-mqtt.env
 nano /etc/proxmox-ha-mqtt.env
 
 systemctl daemon-reload
-systemctl enable --now proxmox-ha-hwmon.timer proxmox-ha-smart.timer
-systemctl start proxmox-ha-hwmon.service proxmox-ha-smart.service
+systemctl enable --now proxmox-ha-hwmon.service proxmox-ha-smart.service
 ```
 
 Full installation notes are in [docs/installation.md](docs/installation.md).
@@ -107,8 +110,9 @@ It contains MQTT credentials. This repository includes only [`examples/proxmox-h
 Recommended file permissions on the Proxmox host:
 
 ```text
--rwx------ root:root /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
--rwx------ root:root /usr/local/sbin/proxmox-ha-smart-mqtt.sh
+-rwx------ root:root /usr/local/sbin/proxmox-ha-hwmon-daemon.py
+-rwx------ root:root /usr/local/sbin/proxmox-ha-smart-daemon.py
+-rw-r--r-- root:root /usr/local/sbin/proxmox_ha_common.py
 -rw------- root:root /etc/proxmox-ha-mqtt.env
 ```
 
@@ -116,7 +120,14 @@ More security notes: [docs/security.md](docs/security.md).
 
 ## Script overview
 
-### [`scripts/proxmox-ha-hwmon-mqtt.sh`](scripts/proxmox-ha-hwmon-mqtt.sh)
+Both daemons hold one MQTT connection open for their entire run (instead of
+spawning a new connection per metric) and loop internally on
+`HWMON_INTERVAL_SECONDS` / `SMART_INTERVAL_SECONDS`. MQTT Discovery configs
+are only (re-)published when a `unique_id` wasn't seen yet in the current
+process (always true right after a restart, so retained discovery
+self-heals); every cycle after that publishes state values only.
+
+### [`scripts/proxmox-ha-hwmon-daemon.py`](scripts/proxmox-ha-hwmon-daemon.py)
 
 Reads:
 
@@ -134,7 +145,7 @@ Publishes numeric hwmon values as MQTT Discovery entities:
 - `*_alarm` -> binary problem sensors.
 - other numeric values -> diagnostic sensors.
 
-### [`scripts/proxmox-ha-smart-mqtt.sh`](scripts/proxmox-ha-smart-mqtt.sh)
+### [`scripts/proxmox-ha-smart-daemon.py`](scripts/proxmox-ha-smart-daemon.py)
 
 Reads disks from:
 
@@ -161,14 +172,15 @@ The SMART exporter intentionally does **not** publish every ATA raw value, becau
 ## Validation
 
 ```bash
-bash -n /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
-bash -n /usr/local/sbin/proxmox-ha-smart-mqtt.sh
+python3 -m py_compile /usr/local/sbin/proxmox-ha-hwmon-daemon.py
+python3 -m py_compile /usr/local/sbin/proxmox-ha-smart-daemon.py
 
-/usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
-/usr/local/sbin/proxmox-ha-smart-mqtt.sh
+# Run in the foreground, Ctrl+C to stop:
+/usr/local/sbin/proxmox-ha-hwmon-daemon.py
+/usr/local/sbin/proxmox-ha-smart-daemon.py
 
-systemctl status proxmox-ha-hwmon.timer --no-pager
-systemctl status proxmox-ha-smart.timer --no-pager
+systemctl status proxmox-ha-hwmon.service --no-pager
+systemctl status proxmox-ha-smart.service --no-pager
 journalctl -u proxmox-ha-hwmon.service -n 100 --no-pager
 journalctl -u proxmox-ha-smart.service -n 100 --no-pager
 ```
@@ -180,8 +192,8 @@ More diagnostics: [docs/troubleshooting.md](docs/troubleshooting.md).
 Initial working setup:
 
 ```text
-jq                 1.6-2.1+deb12u1
 lm-sensors         1:3.6.0-7.1
+python3-paho-mqtt  1.6.1-1
 mosquitto-clients  2.0.11-1.2+deb12u2
 smartmontools      7.3-pve1
 ```

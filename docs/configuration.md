@@ -6,7 +6,11 @@ All runtime configuration is loaded from:
 /etc/proxmox-ha-mqtt.env
 ```
 
-This file is sourced by both scripts and should be readable only by root.
+This file is parsed by both daemons at startup and should be readable only by root.
+
+It uses a small `KEY="value"` parser, not a full shell interpreter - no
+`export`, command substitution, or variable interpolation. Keep it in the
+same plain format as `examples/proxmox-ha-mqtt.env.example`.
 
 ## Variables
 
@@ -20,6 +24,13 @@ This file is sourced by both scripts and should be readable only by root.
 | `DISCOVERY_PREFIX` | no | both | MQTT Discovery prefix. Home Assistant default is usually `homeassistant`. |
 | `BASE_TOPIC` | no | hwmon | State topic base for `sensors -j` exporter. |
 | `SMART_BASE_TOPIC` | no | SMART | State topic base for SMART/NVMe exporter. |
+| `HWMON_INTERVAL_SECONDS` | no | hwmon | Seconds between hwmon publish cycles. Defaults to `60`. |
+| `SMART_INTERVAL_SECONDS` | no | SMART | Seconds between SMART publish cycles. Defaults to `300`. |
+
+Changing an interval only takes effect after `systemctl restart
+proxmox-ha-hwmon.service` / `proxmox-ha-smart.service` - both daemons read
+the env file once at startup, since they no longer get re-invoked
+periodically by a systemd timer.
 
 ## Example
 
@@ -34,6 +45,9 @@ DISCOVERY_PREFIX="homeassistant"
 
 BASE_TOPIC="proxmox/pve/hwmon"
 SMART_BASE_TOPIC="proxmox/pve/smart"
+
+HWMON_INTERVAL_SECONDS="60"
+SMART_INTERVAL_SECONDS="300"
 ```
 
 ## Topic naming

@@ -18,8 +18,14 @@ If Mosquitto runs as a Home Assistant add-on, `MQTT_HOST` is usually the IP addr
 
 ```bash
 apt update
-apt install -y lm-sensors jq mosquitto-clients smartmontools
+apt install -y lm-sensors python3 python3-paho-mqtt mosquitto-clients smartmontools
 ```
+
+`python3-paho-mqtt` is the MQTT client library the daemons use to hold a
+single persistent connection open (instead of shelling out to
+`mosquitto_pub` once per metric). `mosquitto-clients` is no longer required
+by the daemons themselves, but is kept for the manual `mosquitto_pub` /
+`mosquitto_sub` checks used below and in troubleshooting.
 
 Optional, for network tests:
 
@@ -33,7 +39,7 @@ Hardware sensors:
 
 ```bash
 sensors
-sensors -j | jq
+sensors -j
 ```
 
 SMART/NVMe disks:
@@ -45,8 +51,8 @@ smartctl --scan-open
 Test one disk manually if needed:
 
 ```bash
-smartctl -a -j /dev/nvme0 | jq
-smartctl -a -j -d sat /dev/sda | jq
+smartctl -a -j /dev/nvme0
+smartctl -a -j -d sat /dev/sda
 ```
 
 Use the exact device/type combination returned by `smartctl --scan-open`.
@@ -56,15 +62,20 @@ Use the exact device/type combination returned by `smartctl --scan-open`.
 From the repository root on the Proxmox host:
 
 ```bash
-install -m 700 scripts/proxmox-ha-hwmon-mqtt.sh /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
-install -m 700 scripts/proxmox-ha-smart-mqtt.sh /usr/local/sbin/proxmox-ha-smart-mqtt.sh
+install -m 700 scripts/proxmox-ha-hwmon-daemon.py /usr/local/sbin/proxmox-ha-hwmon-daemon.py
+install -m 700 scripts/proxmox-ha-smart-daemon.py /usr/local/sbin/proxmox-ha-smart-daemon.py
+install -m 644 scripts/proxmox_ha_common.py /usr/local/sbin/proxmox_ha_common.py
 ```
+
+`proxmox_ha_common.py` is a shared module imported by both daemons - it must
+live in the same directory as them, but does not need the execute bit.
 
 Expected permissions:
 
 ```text
--rwx------ root:root /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
--rwx------ root:root /usr/local/sbin/proxmox-ha-smart-mqtt.sh
+-rwx------ root:root /usr/local/sbin/proxmox-ha-hwmon-daemon.py
+-rwx------ root:root /usr/local/sbin/proxmox-ha-smart-daemon.py
+-rw-r--r-- root:root /usr/local/sbin/proxmox_ha_common.py
 ```
 
 ## 4. Create `/etc/proxmox-ha-mqtt.env`
@@ -85,6 +96,8 @@ NODE_NAME="pve"
 DISCOVERY_PREFIX="homeassistant"
 BASE_TOPIC="proxmox/pve/hwmon"
 SMART_BASE_TOPIC="proxmox/pve/smart"
+HWMON_INTERVAL_SECONDS="60"
+SMART_INTERVAL_SECONDS="300"
 ```
 
 Then secure it:
@@ -124,11 +137,13 @@ Client null sending DISCONNECT
 ## 6. Test exporters manually
 
 ```bash
-bash -n /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
-bash -n /usr/local/sbin/proxmox-ha-smart-mqtt.sh
+python3 -m py_compile /usr/local/sbin/proxmox-ha-hwmon-daemon.py
+python3 -m py_compile /usr/local/sbin/proxmox-ha-smart-daemon.py
 
-/usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
-/usr/local/sbin/proxmox-ha-smart-mqtt.sh
+# Each daemon runs in the foreground and loops forever - stop it with Ctrl+C
+# once you've confirmed it connected and published a cycle.
+/usr/local/sbin/proxmox-ha-hwmon-daemon.py
+/usr/local/sbin/proxmox-ha-smart-daemon.py
 ```
 
 In MQTT Explorer or Home Assistant MQTT listener, look for:
@@ -141,24 +156,27 @@ homeassistant/#
 
 ## 7. Install systemd units
 
+These are long-running services (`Type=simple`, `Restart=always`), not
+timers - each daemon does its own internal scheduling based on
+`HWMON_INTERVAL_SECONDS` / `SMART_INTERVAL_SECONDS`.
+
 ```bash
 install -m 644 systemd/proxmox-ha-hwmon.service /etc/systemd/system/proxmox-ha-hwmon.service
-install -m 644 systemd/proxmox-ha-hwmon.timer /etc/systemd/system/proxmox-ha-hwmon.timer
 install -m 644 systemd/proxmox-ha-smart.service /etc/systemd/system/proxmox-ha-smart.service
-install -m 644 systemd/proxmox-ha-smart.timer /etc/systemd/system/proxmox-ha-smart.timer
 
 systemctl daemon-reload
-systemctl enable --now proxmox-ha-hwmon.timer proxmox-ha-smart.timer
-systemctl start proxmox-ha-hwmon.service proxmox-ha-smart.service
+systemctl enable --now proxmox-ha-hwmon.service proxmox-ha-smart.service
 ```
 
 ## 8. Verify systemd
 
 ```bash
-systemctl status proxmox-ha-hwmon.timer --no-pager
-systemctl status proxmox-ha-smart.timer --no-pager
-systemctl list-timers | grep proxmox-ha
+systemctl status proxmox-ha-hwmon.service --no-pager
+systemctl status proxmox-ha-smart.service --no-pager
 
 journalctl -u proxmox-ha-hwmon.service -n 100 --no-pager
 journalctl -u proxmox-ha-smart.service -n 150 --no-pager
 ```
+
+Each service should log an MQTT connect once at startup, then one publish
+cycle per interval - not a burst of connect/disconnect lines per metric.

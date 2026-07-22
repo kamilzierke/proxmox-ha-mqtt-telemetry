@@ -1,11 +1,15 @@
 # MQTT topics and Home Assistant discovery
 
+Both exporters hold a single MQTT connection open for their whole run and
+publish discovery configs once (right after startup, or the first time a
+new `unique_id` appears), then only state values on every following cycle.
+
 ## hwmon exporter
 
 Script:
 
 ```text
-scripts/proxmox-ha-hwmon-mqtt.sh
+scripts/proxmox-ha-hwmon-daemon.py
 ```
 
 Source command:
@@ -19,6 +23,11 @@ Default availability topic:
 ```text
 proxmox/pve/hwmon/availability
 ```
+
+This is the daemon's MQTT Last Will topic: the broker publishes `offline`
+here automatically if the daemon disconnects uncleanly (crash, lost
+network, host power loss), in addition to the daemon publishing `online`
+itself right after connecting.
 
 Default state topic pattern:
 
@@ -50,7 +59,7 @@ Classification logic:
 Script:
 
 ```text
-scripts/proxmox-ha-smart-mqtt.sh
+scripts/proxmox-ha-smart-daemon.py
 ```
 
 Disk discovery command:
@@ -65,11 +74,22 @@ Per-disk read command:
 smartctl -a -j <scan arguments>
 ```
 
-Default availability topic pattern:
+Default availability topic:
 
 ```text
-proxmox/pve/smart/<disk_key>/availability
+proxmox/pve/smart/availability
 ```
+
+> **Changed from per-disk to daemon-wide.** The SMART exporter used to
+> publish a separate `proxmox/<node>/smart/<disk_key>/availability` topic
+> per disk, retained `online` and never actually flipped to `offline` by
+> anything. The daemon now holds one MQTT connection for all disks, so
+> there is one Last Will topic shared by every disk's `availability_topic`
+> - the broker sets it `offline` for real if the daemon disconnects
+> uncleanly. Upgrading from the old shell scripts leaves the old per-disk
+> `.../availability` topics retained and orphaned on the broker (nothing
+> references them anymore); clear them manually if you want, e.g.
+> `mosquitto_pub -r -n -t 'proxmox/pve/smart/<disk_key>/availability'`.
 
 Default state topic pattern:
 

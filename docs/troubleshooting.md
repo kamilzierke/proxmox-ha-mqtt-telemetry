@@ -5,24 +5,23 @@
 ```bash
 ls -lah \
   /etc/proxmox-ha-mqtt.env \
-  /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh \
-  /usr/local/sbin/proxmox-ha-smart-mqtt.sh \
+  /usr/local/sbin/proxmox-ha-hwmon-daemon.py \
+  /usr/local/sbin/proxmox-ha-smart-daemon.py \
+  /usr/local/sbin/proxmox_ha_common.py \
   /etc/systemd/system/proxmox-ha-hwmon.service \
-  /etc/systemd/system/proxmox-ha-hwmon.timer \
-  /etc/systemd/system/proxmox-ha-smart.service \
-  /etc/systemd/system/proxmox-ha-smart.timer
+  /etc/systemd/system/proxmox-ha-smart.service
 
 stat -c '%A %U:%G %n' \
-  /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh \
-  /usr/local/sbin/proxmox-ha-smart-mqtt.sh \
+  /usr/local/sbin/proxmox-ha-hwmon-daemon.py \
+  /usr/local/sbin/proxmox-ha-smart-daemon.py \
   /etc/proxmox-ha-mqtt.env
 ```
 
 Recommended:
 
 ```text
--rwx------ root:root /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
--rwx------ root:root /usr/local/sbin/proxmox-ha-smart-mqtt.sh
+-rwx------ root:root /usr/local/sbin/proxmox-ha-hwmon-daemon.py
+-rwx------ root:root /usr/local/sbin/proxmox-ha-smart-daemon.py
 -rw------- root:root /etc/proxmox-ha-mqtt.env
 ```
 
@@ -36,10 +35,10 @@ sed -E 's/^(MQTT_PASS=).*/\1"***REDACTED***"/' /etc/proxmox-ha-mqtt.env
 ## 3. Validate script syntax
 
 ```bash
-bash -n /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
+python3 -m py_compile /usr/local/sbin/proxmox-ha-hwmon-daemon.py
 echo "hwmon syntax exit=$?"
 
-bash -n /usr/local/sbin/proxmox-ha-smart-mqtt.sh
+python3 -m py_compile /usr/local/sbin/proxmox-ha-smart-daemon.py
 echo "smart syntax exit=$?"
 ```
 
@@ -53,19 +52,21 @@ smart syntax exit=0
 ## 4. Check dependencies
 
 ```bash
-for cmd in sensors jq mosquitto_pub smartctl systemctl; do
+for cmd in sensors smartctl python3 systemctl; do
   printf "%-15s " "$cmd"
   command -v "$cmd" || echo "MISSING"
 done
 
-dpkg -l lm-sensors jq mosquitto-clients smartmontools | awk '/^ii/ {print $2, $3}'
+python3 -c "import paho.mqtt.client" && echo "paho-mqtt: OK" || echo "paho-mqtt: MISSING"
+
+dpkg -l lm-sensors python3-paho-mqtt mosquitto-clients smartmontools | awk '/^ii/ {print $2, $3}'
 ```
 
 ## 5. Check local sensor sources
 
 ```bash
 sensors
-sensors -j | jq
+sensors -j
 smartctl --scan-open
 ```
 
@@ -112,13 +113,21 @@ Client null sending DISCONNECT
 
 ## 8. Run exporters manually
 
-```bash
-/usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
-echo "hwmon exit=$?"
+Each daemon runs in the foreground and loops forever - it will not exit on
+its own. Run it, confirm at least one publish cycle happened, then stop it
+with Ctrl+C.
 
-/usr/local/sbin/proxmox-ha-smart-mqtt.sh
-echo "smart exit=$?"
+```bash
+/usr/local/sbin/proxmox-ha-hwmon-daemon.py
+# Ctrl+C once you see a cycle of "INFO: sensor ... = ..." lines
+
+/usr/local/sbin/proxmox-ha-smart-daemon.py
+# Ctrl+C once you see a cycle of "INFO: proxmox_... = ..." lines
 ```
+
+If it exits immediately instead of looping, read the last log line - it is
+almost always a missing `MQTT_HOST`, an unreachable broker, or a missing
+`sensors`/`smartctl` command.
 
 ## 9. Listen to telemetry topics
 
@@ -137,8 +146,8 @@ mosquitto_sub \
 In a second shell, run:
 
 ```bash
-/usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
-/usr/local/sbin/proxmox-ha-smart-mqtt.sh
+/usr/local/sbin/proxmox-ha-hwmon-daemon.py
+/usr/local/sbin/proxmox-ha-smart-daemon.py
 ```
 
 ## 10. Listen to Home Assistant MQTT Discovery
@@ -155,17 +164,26 @@ mosquitto_sub \
   -v
 ```
 
-If `proxmox/pve/#` appears but `homeassistant/#` does not, the scripts are not publishing discovery payloads or are failing before config publish.
+If `proxmox/pve/#` appears but `homeassistant/#` does not, note that discovery
+configs are now only (re-)published once per daemon start, or the first
+time a new `unique_id` shows up - restart the service
+(`systemctl restart proxmox-ha-hwmon.service`) to force a full discovery
+republish if you suspect retained configs were lost or are stale.
 
 If both appear but Home Assistant has no entities, check MQTT Discovery in Home Assistant.
 
-## 11. Check systemd timers
+## 11. Check systemd services
+
+These are long-running services, not timers - there is no `systemctl
+list-timers` entry for them anymore.
 
 ```bash
-systemctl status proxmox-ha-hwmon.timer --no-pager
-systemctl status proxmox-ha-smart.timer --no-pager
-systemctl list-timers | grep proxmox-ha
+systemctl status proxmox-ha-hwmon.service --no-pager
+systemctl status proxmox-ha-smart.service --no-pager
 ```
+
+A healthy service shows `Active: active (running)` continuously, not
+`inactive (dead)` between runs.
 
 ## 12. Read logs
 
@@ -180,3 +198,23 @@ Live follow:
 journalctl -u proxmox-ha-hwmon.service -f
 journalctl -u proxmox-ha-smart.service -f
 ```
+
+## 13. Verify the Last Will (offline detection)
+
+Each daemon sets an MQTT Last Will on its availability topic, so the broker
+reports `offline` on an unclean disconnect - not only when the daemon
+publishes `online` itself.
+
+```bash
+mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" \
+  -t 'proxmox/pve/hwmon/availability' -t 'proxmox/pve/smart/availability' -v
+
+# In another shell, simulate a crash (not a graceful stop):
+systemctl kill -s SIGKILL proxmox-ha-hwmon.service
+```
+
+Expect `offline` to appear on `proxmox/pve/hwmon/availability` within a few
+seconds (the broker's keepalive timeout), followed by `online` again once
+`Restart=always` brings the service back up. A graceful
+`systemctl stop proxmox-ha-hwmon.service` also publishes `offline`
+explicitly before disconnecting.

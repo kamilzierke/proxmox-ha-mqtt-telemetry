@@ -1,6 +1,6 @@
 # Security notes
 
-This project is intentionally simple, but it still runs shell scripts as root on a hypervisor. Treat it accordingly.
+This project is intentionally simple, but it still runs as root on a hypervisor - as two long-running Python daemons rather than periodic shell scripts. Treat it accordingly.
 
 ## Do not publish secrets
 
@@ -21,12 +21,14 @@ examples/proxmox-ha-mqtt.env.example
 ## Recommended permissions
 
 ```bash
-chmod 700 /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh
-chmod 700 /usr/local/sbin/proxmox-ha-smart-mqtt.sh
+chmod 700 /usr/local/sbin/proxmox-ha-hwmon-daemon.py
+chmod 700 /usr/local/sbin/proxmox-ha-smart-daemon.py
+chmod 644 /usr/local/sbin/proxmox_ha_common.py
 chmod 600 /etc/proxmox-ha-mqtt.env
 chown root:root \
-  /usr/local/sbin/proxmox-ha-hwmon-mqtt.sh \
-  /usr/local/sbin/proxmox-ha-smart-mqtt.sh \
+  /usr/local/sbin/proxmox-ha-hwmon-daemon.py \
+  /usr/local/sbin/proxmox-ha-smart-daemon.py \
+  /usr/local/sbin/proxmox_ha_common.py \
   /etc/proxmox-ha-mqtt.env
 ```
 

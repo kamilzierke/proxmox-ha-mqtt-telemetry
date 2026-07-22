@@ -4,5 +4,10 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/proxmox-ha-smart-mqtt.sh
+Type=simple
+ExecStart=/usr/local/sbin/proxmox-ha-smart-daemon.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
